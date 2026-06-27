@@ -3,6 +3,7 @@
 
 import os
 import sys
+import json
 import argparse
 import tqdm
 import sqlite3
@@ -25,6 +26,16 @@ import GkmasObjectManager as gom # type: ignore
 
 print('拉取清单文件...')
 manifest = gom.fetch()
+
+# 预构建 manifest 中所有资源名称集合，用于提前过滤不存在的资产
+manifest_asset_names = set()
+for obj in list(manifest.assetbundles):
+    name = obj.name
+    if name.endswith('.unity3d'):
+        name = name[:-8]
+    manifest_asset_names.add(name)
+for obj in list(manifest.resources):
+    manifest_asset_names.add(obj.name)
 
 
 def make_image_validator(expected_size: tuple[int, int]) -> Callable[[str], bool]:
@@ -52,12 +63,28 @@ def make_image_validator(expected_size: tuple[int, int]) -> Callable[[str], bool
     return validator
 
 
-# 定义下载任务类型：(资源ID, 下载路径, 下载完成后调用的函数, 验证函数)
-DownloadTask = Tuple[str, str, Callable[[str], None] | None, Callable[[str], bool] | None]
+# 定义下载任务类型：(资源ID, 下载路径, 下载完成后调用的函数, 验证函数, 关联的皮肤/卡片ID)
+DownloadTask = Tuple[str, str, Callable[[str], None] | None, Callable[[str], bool] | None, str]
 download_tasks: List[DownloadTask] = []
+
+# 记录因 CDN 未上线而跳过的资源
+skipped_assets: List[dict] = []
 
 MAX_RETRY_COUNT = 5
 MAX_WORKERS = 1  # 最大并发下载数
+
+def _try_add_task(asset_id: str, path: str, post_process: Callable[[str], None] | None,
+                   validator: Callable[[str], bool] | None, ref_id: str) -> None:
+    """如果 asset_id 在 manifest 中则添加下载任务，否则记录为跳过"""
+    if asset_id in manifest_asset_names:
+        download_tasks.append((asset_id, path, post_process, validator, ref_id))
+    else:
+        skipped_assets.append({
+            "id": asset_id,
+            "path": path,
+            "refId": ref_id,
+            "reason": "asset not found in manifest (CDN not yet updated)"
+        })
 
 def download_to(asset_id: str, path: str, overwrite: bool = False) -> bool:
     """
@@ -84,7 +111,7 @@ def download_to(asset_id: str, path: str, overwrite: bool = False) -> bool:
 def run(tasks: List[DownloadTask], description: str = "下载中") -> None:
     """并行执行下载任务列表"""
     def _download(task: DownloadTask) -> None:
-        asset_id, path, post_process_func, validator = task
+        asset_id, path, post_process_func, validator, _ = task
         try:
             downloaded = download_to(asset_id, path)
             if downloaded:
@@ -189,12 +216,12 @@ for row in tqdm.tqdm(cursor.fetchall(), desc="构建偶像卡任务"):
     # 低特训等级
     asset_id0 = f'img_general_{asset_id}_0-thumb-portrait'
     path0 = IDOL_CARD_PATH + f'/{skin_id}_0.png'
-    download_tasks.append((asset_id0, path0, resize_idol_card_image, validator))
+    _try_add_task(asset_id0, path0, resize_idol_card_image, validator, skin_id)
 
     # 高特训等级
     asset_id1 = f'img_general_{asset_id}_1-thumb-portrait'
     path1 = IDOL_CARD_PATH + f'/{skin_id}_1.png'
-    download_tasks.append((asset_id1, path1, resize_idol_card_image, validator))
+    _try_add_task(asset_id1, path1, resize_idol_card_image, validator, skin_id)
 
 # 2. 构建技能卡下载任务
 print("添加技能卡任务...")
@@ -210,12 +237,12 @@ for row in tqdm.tqdm(cursor.fetchall(), desc="构建技能卡任务"):
     assert asset_id is not None
     if not is_character_asset:
         path = SKILL_CARD_PATH + f'/{asset_id}.png'
-        download_tasks.append((asset_id, path, None, None))
+        _try_add_task(asset_id, path, None, None, asset_id)
     else:
         for char_id in CHARACTER_IDS:
             actual_asset_id = f'{asset_id}-{char_id}'
             path = SKILL_CARD_PATH + f'/{actual_asset_id}.png'
-            download_tasks.append((actual_asset_id, path, None, None))
+            _try_add_task(actual_asset_id, path, None, None, actual_asset_id)
 
 # 3. 构建饮品下载任务
 print("添加饮品任务...")
@@ -229,7 +256,7 @@ for row in tqdm.tqdm(cursor.fetchall(), desc="构建饮品任务"):
     asset_id = row[0]
     assert asset_id is not None
     path = DRINK_PATH + f'/{asset_id}.png'
-    download_tasks.append((asset_id, path, resize_drink_image, make_image_validator((68, 68))))
+    _try_add_task(asset_id, path, resize_drink_image, make_image_validator((68, 68)), asset_id)
 
 print(f'开始下载 {len(download_tasks)} 个资源，并发数 {MAX_WORKERS}...')
 run(download_tasks)
@@ -244,7 +271,7 @@ def check_downloaded_files(tasks: List[DownloadTask]) -> List[DownloadTask]:
 
     print("检查下载的文件...")
     for task in tqdm.tqdm(tasks, desc="检查文件"):
-        _, path, _, validator = task
+        _, path, _, validator, _ = task
 
         # 检查文件是否存在
         if not os.path.exists(path):
@@ -294,7 +321,7 @@ while retry_round < max_retry_rounds:
 
     # 删除失败的文件，准备重新下载
     for task in failed_tasks:
-        _, path, _, _ = task
+        _, path, _, _, _ = task
         if os.path.exists(path):
             try:
                 os.remove(path)
@@ -313,8 +340,17 @@ while retry_round < max_retry_rounds:
 if failed_tasks:
     print(f"警告：仍有 {len(failed_tasks)} 个文件下载失败：")
     for task in failed_tasks:
-        asset_id, path, _, _ = task
+        asset_id, path, _, _, _ = task
         print(f"  - {asset_id} -> {path}")
+
+# 输出跳过资源清单，供 release notes 使用
+if skipped_assets:
+    skipped_path = os.path.join(os.path.dirname(_args.output_dir), 'skipped_assets.json')
+    with open(skipped_path, 'w', encoding='utf-8') as f:
+        json.dump(skipped_assets, f, ensure_ascii=False, indent=2)
+    print(f"\n跳过 {len(skipped_assets)} 个 CDN 未上线的资源，详情已写入 {skipped_path}")
+    for item in skipped_assets:
+        print(f"  [SKIP] {item['id']} (ref: {item['refId']}) — {item['reason']}")
 
 
 db.close()
