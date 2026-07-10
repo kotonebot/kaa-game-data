@@ -90,7 +90,12 @@ def run_release(config: PipelineConfig, *, force: bool = False) -> None:
         skipped = [SkippedAsset(x["id"], x["refId"], x.get("reason", "")) for x in raw]
 
     notes_path = config.root / "release_notes.md"
-    publish_release(tag, sha, config.release_dir, skipped, notes_path)
+    extra_assets = [
+        path
+        for path in (config.output_dir / "skipped_assets.json", config.build_report_path)
+        if path.exists()
+    ]
+    publish_release(tag, sha, config.release_dir, skipped, notes_path, extra_assets=extra_assets)
 
 
 def diff_backends(config: PipelineConfig) -> None:

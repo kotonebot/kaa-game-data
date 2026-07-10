@@ -4,7 +4,12 @@ import json
 import subprocess
 from pathlib import Path
 
+from collections import Counter
+
 from kaa_data.models import BuildReport, FetchReport, FileInfo, SkippedAsset
+
+MAX_RELEASE_NOTES_CHARS = 120_000
+MAX_SKIPPED_TABLE_ROWS = 50
 
 
 def gakumasu_diff_sha(gakumasu_diff: Path) -> str:
@@ -37,11 +42,23 @@ def write_release_notes(sha: str, skipped: list[SkippedAsset], out_path: Path) -
         notes += f"\n\n## Skipped Assets ({len(skipped)})\n\n"
         notes += (
             "These assets are referenced in game master data but not yet available on the game CDN.\n"
-            "They will be included in a future build when the CDN is updated.\n\n"
+            "They will be included in a future build when the CDN is updated.\n"
+            "See `skipped_assets.json` in the release assets for the full list.\n\n"
         )
+        reason_counts = Counter(item.reason or "unknown" for item in skipped)
+        notes += "### By reason\n\n"
+        for reason, count in reason_counts.most_common(10):
+            notes += f"- {reason}: {count}\n"
+        notes += "\n### Sample\n\n"
         notes += "| Asset ID | Reference | Reason |\n| --- | --- | --- |\n"
-        for item in skipped:
+        for item in skipped[:MAX_SKIPPED_TABLE_ROWS]:
             notes += f"| {item.asset_name} | {item.ref_id} | {item.reason} |\n"
+        if len(skipped) > MAX_SKIPPED_TABLE_ROWS:
+            notes += (
+                f"\n_Showing {MAX_SKIPPED_TABLE_ROWS} of {len(skipped)} skipped assets._\n"
+            )
+    if len(notes) > MAX_RELEASE_NOTES_CHARS:
+        notes = notes[: MAX_RELEASE_NOTES_CHARS - 20].rstrip() + "\n\n_(truncated)_\n"
     out_path.write_text(notes, encoding="utf-8")
 
 
@@ -68,6 +85,8 @@ def publish_release(
     release_dir: Path,
     skipped: list[SkippedAsset],
     notes_path: Path,
+    *,
+    extra_assets: list[Path] | None = None,
 ) -> None:
     write_release_notes(sha, skipped, notes_path)
     assets = [
@@ -76,6 +95,7 @@ def publish_release(
         release_dir / "idol_cards.zip",
         release_dir / "skill_cards.zip",
         release_dir / "drinks.zip",
+        *(extra_assets or []),
     ]
     cmd = [
         "gh",
