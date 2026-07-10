@@ -78,4 +78,6 @@ jobs:
 
       - name: Publish Release
         if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: kaa-data release
