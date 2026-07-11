@@ -1,6 +1,7 @@
 import os
 from unittest import mock
 
+from kaa_data.release.publish import publish_release
 from kaa_data.release.versioning import (
     base_sha_from_tag,
     format_data_tag,
@@ -48,3 +49,16 @@ def test_resolve_release_suffix_uses_github_run_number():
     env = {"GITHUB_RUN_NUMBER": "17"}
     with mock.patch.dict(os.environ, env, clear=True):
         assert resolve_release_suffix(force=True) == "r17"
+
+
+def test_publish_release_passes_draft_flag(tmp_path):
+    notes_path = tmp_path / "release_notes.md"
+    notes_path.write_text("notes", encoding="utf-8")
+    release_dir = tmp_path / "release"
+    release_dir.mkdir()
+    (release_dir / "manifest.json").write_text("{}", encoding="utf-8")
+
+    with mock.patch("kaa_data.release.publish.subprocess.run") as run:
+        publish_release(f"data-{_SHA}", _SHA, release_dir, [], notes_path, draft=True)
+        cmd = run.call_args[0][0]
+        assert "--draft" in cmd

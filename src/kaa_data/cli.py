@@ -51,7 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     sprites_p.add_argument("--backend", choices=["gom", "campus"], required=True)
 
     sub.add_parser("package", help="Compress and archive release artifacts")
-    sub.add_parser("release", parents=[optional], help="Publish GitHub release")
+    release_p = sub.add_parser("release", parents=[optional], help="Publish GitHub release")
+    release_p.add_argument("--draft", action="store_true", help="Publish as draft release")
     sub.add_parser("diff-backends", help="Compare gom vs campus sprite outputs")
 
     args = parser.parse_args(argv)
@@ -90,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
                 config,
                 force=args.force,
                 release_suffix=args.release_suffix,
+                draft=args.draft,
             )
         elif args.command == "diff-backends":
             diff_backends(config)

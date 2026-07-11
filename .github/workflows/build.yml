@@ -18,6 +18,11 @@ on:
         options:
           - gom
           - campus
+      draft:
+        description: 'Publish release as draft'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   build:
@@ -94,6 +99,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FORCE: ${{ inputs.force || 'false' }}
+          DRAFT: ${{ inputs.draft || 'false' }}
           KAA_RELEASE_SUFFIX: ${{ steps.check.outputs.release_suffix }}
         run: |
           ARGS=(release)
@@ -101,4 +107,5 @@ jobs:
           if [ -n "$KAA_RELEASE_SUFFIX" ]; then
             ARGS+=(--release-suffix "$KAA_RELEASE_SUFFIX")
           fi
+          if [ "$DRAFT" = "true" ]; then ARGS+=(--draft); fi
           kaa-data "${ARGS[@]}"

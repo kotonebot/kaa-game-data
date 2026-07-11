@@ -96,6 +96,7 @@ def publish_release(
     notes_path: Path,
     *,
     extra_assets: list[Path] | None = None,
+    draft: bool = False,
 ) -> None:
     write_release_notes(sha, skipped, notes_path)
     parsed = parse_data_tag(tag)
@@ -121,8 +122,10 @@ def publish_release(
         f"Game Data {version_label}",
         "--notes-file",
         str(notes_path),
-        *[str(p) for p in assets if p.exists()],
     ]
+    if draft:
+        cmd.append("--draft")
+    cmd.extend(str(p) for p in assets if p.exists())
     subprocess.run(cmd, check=True)
 
 

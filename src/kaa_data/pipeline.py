@@ -90,6 +90,7 @@ def run_release(
     *,
     force: bool = False,
     release_suffix: str | None = None,
+    draft: bool = False,
 ) -> None:
     from kaa_data.release import gakumasu_diff_sha, needs_release, publish_release
     from kaa_data.release.versioning import format_data_tag, resolve_release_suffix
@@ -115,7 +116,15 @@ def run_release(
         for path in (config.output_dir / "skipped_assets.json", config.build_report_path)
         if path.exists()
     ]
-    publish_release(tag, sha, config.release_dir, skipped, notes_path, extra_assets=extra_assets)
+    publish_release(
+        tag,
+        sha,
+        config.release_dir,
+        skipped,
+        notes_path,
+        extra_assets=extra_assets,
+        draft=draft,
+    )
 
 
 def diff_backends(config: PipelineConfig) -> None:
