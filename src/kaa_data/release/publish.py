@@ -7,6 +7,11 @@ from pathlib import Path
 from collections import Counter
 
 from kaa_data.models import BuildReport, FetchReport, FileInfo, SkippedAsset
+from kaa_data.release.versioning import (
+    base_sha_from_tag,
+    format_manifest_version,
+    parse_data_tag,
+)
 
 MAX_RELEASE_NOTES_CHARS = 120_000
 MAX_SKIPPED_TABLE_ROWS = 50
@@ -30,7 +35,11 @@ def needs_release(sha: str, *, force: bool = False) -> bool:
             check=False,
         )
         last_tag = (result.stdout or "").strip() or "none"
-        last_sha = last_tag.removeprefix("data-")
+        if last_tag == "none":
+            return True
+        last_sha = base_sha_from_tag(last_tag)
+        if last_sha is None:
+            return True
         return sha != last_sha
     except FileNotFoundError:
         return True
@@ -89,6 +98,12 @@ def publish_release(
     extra_assets: list[Path] | None = None,
 ) -> None:
     write_release_notes(sha, skipped, notes_path)
+    parsed = parse_data_tag(tag)
+    version_label = (
+        format_manifest_version(parsed[0], parsed[1])
+        if parsed is not None
+        else sha
+    )
     assets = [
         release_dir / "manifest.json",
         release_dir / "game.db.zst",
@@ -103,7 +118,7 @@ def publish_release(
         "create",
         tag,
         "--title",
-        f"Game Data {sha}",
+        f"Game Data {version_label}",
         "--notes-file",
         str(notes_path),
         *[str(p) for p in assets if p.exists()],

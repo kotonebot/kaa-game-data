@@ -31,6 +31,11 @@ def main(argv: list[str] | None = None) -> int:
 
     optional = argparse.ArgumentParser(add_help=False)
     optional.add_argument("--force", action="store_true", help="Force rebuild / release")
+    optional.add_argument(
+        "--release-suffix",
+        default=None,
+        help="Release tag/manifest suffix for force builds (default: r<run_number> or timestamp)",
+    )
 
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -70,13 +75,22 @@ def main(argv: list[str] | None = None) -> int:
             run_package(config, sha)
         elif args.command == "build":
             backend = args.backend or config.default_backend
-            report = run_build(config, backend, force=args.force)
+            report = run_build(
+                config,
+                backend,
+                force=args.force,
+                release_suffix=args.release_suffix,
+            )
             print(
                 f"Build done ({backend}): {report.tasks_ok}/{report.tasks_total} ok, "
                 f"{len(report.tasks_failed)} failed, {len(report.skipped)} skipped"
             )
         elif args.command == "release":
-            run_release(config, force=args.force)
+            run_release(
+                config,
+                force=args.force,
+                release_suffix=args.release_suffix,
+            )
         elif args.command == "diff-backends":
             diff_backends(config)
         else:

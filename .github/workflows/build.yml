@@ -53,16 +53,25 @@ jobs:
         run: |
           SHA=$(git -C ./gakumasu-diff rev-parse HEAD)
           echo "sha=$SHA" >> $GITHUB_OUTPUT
-          echo "tag=data-$SHA" >> $GITHUB_OUTPUT
           if [ "$FORCE" = "true" ]; then
+            SUFFIX="r${{ github.run_number }}"
+            echo "tag=data-$SHA-$SUFFIX" >> $GITHUB_OUTPUT
+            echo "release_suffix=$SUFFIX" >> $GITHUB_OUTPUT
             echo "changed=true" >> $GITHUB_OUTPUT
           else
+            echo "tag=data-$SHA" >> $GITHUB_OUTPUT
+            echo "release_suffix=" >> $GITHUB_OUTPUT
             LAST_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "none")
-            LAST_SHA="${LAST_TAG#data-}"
-            if [ "$SHA" = "$LAST_SHA" ]; then
-              echo "changed=false" >> $GITHUB_OUTPUT
-            else
+            if [ "$LAST_TAG" = "none" ]; then
               echo "changed=true" >> $GITHUB_OUTPUT
+            else
+              REST="${LAST_TAG#data-}"
+              LAST_SHA="${REST:0:40}"
+              if [ "$SHA" = "$LAST_SHA" ]; then
+                echo "changed=false" >> $GITHUB_OUTPUT
+              else
+                echo "changed=true" >> $GITHUB_OUTPUT
+              fi
             fi
           fi
 
@@ -71,13 +80,25 @@ jobs:
         env:
           BACKEND: ${{ inputs.backend || 'gom' }}
           FORCE: ${{ inputs.force || 'false' }}
+          KAA_RELEASE_SUFFIX: ${{ steps.check.outputs.release_suffix }}
         run: |
           ARGS=(build --backend "$BACKEND")
           if [ "$FORCE" = "true" ]; then ARGS+=(--force); fi
+          if [ -n "$KAA_RELEASE_SUFFIX" ]; then
+            ARGS+=(--release-suffix "$KAA_RELEASE_SUFFIX")
+          fi
           kaa-data "${ARGS[@]}"
 
       - name: Publish Release
         if: steps.check.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: kaa-data release
+          FORCE: ${{ inputs.force || 'false' }}
+          KAA_RELEASE_SUFFIX: ${{ steps.check.outputs.release_suffix }}
+        run: |
+          ARGS=(release)
+          if [ "$FORCE" = "true" ]; then ARGS+=(--force); fi
+          if [ -n "$KAA_RELEASE_SUFFIX" ]; then
+            ARGS+=(--release-suffix "$KAA_RELEASE_SUFFIX")
+          fi
+          kaa-data "${ARGS[@]}"

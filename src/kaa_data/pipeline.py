@@ -35,7 +35,7 @@ def run_sprites(config: PipelineConfig, backend_name: str, *, force: bool = Fals
     return backend.fetch(config, task_manifest, force=force)
 
 
-def run_package(config: PipelineConfig, sha: str) -> dict:
+def run_package(config: PipelineConfig, sha: str, *, version: str | None = None) -> dict:
     from kaa_data.package import build_manifest, compress_db, zip_directory
 
     config.ensure_output_dirs()
@@ -49,19 +49,32 @@ def run_package(config: PipelineConfig, sha: str) -> dict:
     zip_directory(config.sprites_dir / "idol_cards", release_dir / "idol_cards.zip")
     zip_directory(config.sprites_dir / "skill_cards", release_dir / "skill_cards.zip")
     zip_directory(config.sprites_dir / "drinks", release_dir / "drinks.zip")
-    files = build_manifest(sha, config.game_db, config.sprites_dir, release_dir / "manifest.json")
+    files = build_manifest(
+        version or sha,
+        config.game_db,
+        config.sprites_dir,
+        release_dir / "manifest.json",
+    )
     return files
 
 
-def run_build(config: PipelineConfig, backend_name: str, *, force: bool = False) -> FetchReport:
+def run_build(
+    config: PipelineConfig,
+    backend_name: str,
+    *,
+    force: bool = False,
+    release_suffix: str | None = None,
+) -> FetchReport:
     from kaa_data.release import gakumasu_diff_sha, make_build_report, write_build_report
+    from kaa_data.release.versioning import format_manifest_version, resolve_release_suffix
 
     sha = gakumasu_diff_sha(config.gakumasu_diff)
+    suffix = resolve_release_suffix(force=force, explicit=release_suffix)
     run_schema(config)
     task_manifest = run_tasks(config)
     fetch_report = run_sprites(config, backend_name, force=force)
 
-    output_files = run_package(config, sha)
+    output_files = run_package(config, sha, version=format_manifest_version(sha, suffix))
     report = make_build_report(sha, backend_name, fetch_report, output_files)
     write_build_report(config.build_report_path, report)
 
@@ -72,15 +85,22 @@ def run_build(config: PipelineConfig, backend_name: str, *, force: bool = False)
     return fetch_report
 
 
-def run_release(config: PipelineConfig, *, force: bool = False) -> None:
+def run_release(
+    config: PipelineConfig,
+    *,
+    force: bool = False,
+    release_suffix: str | None = None,
+) -> None:
     from kaa_data.release import gakumasu_diff_sha, needs_release, publish_release
+    from kaa_data.release.versioning import format_data_tag, resolve_release_suffix
 
     sha = gakumasu_diff_sha(config.gakumasu_diff)
     if not needs_release(sha, force=force):
         print(f"No release needed for {sha}")
         return
 
-    tag = f"data-{sha}"
+    suffix = resolve_release_suffix(force=force, explicit=release_suffix)
+    tag = format_data_tag(sha, suffix)
     skipped = []
     skipped_path = config.output_dir / "skipped_assets.json"
     if skipped_path.exists():
