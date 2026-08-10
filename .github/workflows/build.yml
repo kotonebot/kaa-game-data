@@ -23,6 +23,11 @@ on:
         type: boolean
         required: false
         default: false
+      prune_dry:
+        description: 'Dry run for release pruning: only list releases to remove, do not delete'
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   build:
@@ -108,4 +113,14 @@ jobs:
             ARGS+=(--release-suffix "$KAA_RELEASE_SUFFIX")
           fi
           if [ "$DRAFT" = "true" ]; then ARGS+=(--draft); fi
+          kaa-data "${ARGS[@]}"
+
+      - name: Prune old releases
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRUNE_DRY: ${{ inputs.prune_dry || 'false' }}
+        run: |
+          ARGS=(prune-releases --keep 3)
+          if [ "$PRUNE_DRY" = "true" ]; then ARGS+=(--dry); fi
           kaa-data "${ARGS[@]}"

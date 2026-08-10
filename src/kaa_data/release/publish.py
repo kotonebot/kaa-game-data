@@ -45,6 +45,50 @@ def needs_release(sha: str, *, force: bool = False) -> bool:
         return True
 
 
+def list_releases(*, limit: int = 100) -> list[str]:
+    """List release tag names via `gh`, newest first.
+
+    Raises RuntimeError if the `gh` CLI fails.
+    """
+    cmd = [
+        "gh",
+        "release",
+        "list",
+        "--limit",
+        str(limit),
+        "--json",
+        "tagName",
+        "-q",
+        ".[].tagName",
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f"gh release list failed: {result.stderr.strip()}")
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def prune_releases(*, keep: int = 3, dry: bool = False) -> tuple[list[str], list[str]]:
+    """Delete all but the `keep` newest data releases.
+
+    Only releases whose tag matches the pipeline `data-<sha>` convention
+    are considered, so unrelated manual releases are left untouched.
+
+    Returns (kept_tags, removed_tags). In dry mode nothing is actually
+    deleted, only the plan is returned.
+    """
+    if keep < 1:
+        raise ValueError("keep must be >= 1")
+    tags = [tag for tag in list_releases() if parse_data_tag(tag) is not None]
+    kept = tags[:keep]
+    removed = tags[keep:]
+    if dry:
+        return kept, removed
+    for tag in removed:
+        cmd = ["gh", "release", "delete", tag, "--yes", "--cleanup-tag"]
+        subprocess.run(cmd, check=True)
+    return kept, removed
+
+
 def write_release_notes(sha: str, skipped: list[SkippedAsset], out_path: Path) -> None:
     notes = f"gakumasu-diff commit: {sha}"
     if skipped:

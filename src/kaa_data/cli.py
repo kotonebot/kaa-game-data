@@ -15,7 +15,7 @@ from kaa_data.pipeline import (
     run_sprites,
     run_tasks,
 )
-from kaa_data.release import gakumasu_diff_sha
+from kaa_data.release import gakumasu_diff_sha, prune_releases
 from kaa_data.vendor import vendor_sync
 
 
@@ -53,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("package", help="Compress and archive release artifacts")
     release_p = sub.add_parser("release", parents=[optional], help="Publish GitHub release")
     release_p.add_argument("--draft", action="store_true", help="Publish as draft release")
+    prune_p = sub.add_parser("prune-releases", help="Delete old releases, keeping only the newest few")
+    prune_p.add_argument("--keep", type=int, default=3, help="Number of newest releases to keep (default: 3)")
+    prune_p.add_argument("--dry", action="store_true", help="Only list releases to remove/keep, do not delete")
     sub.add_parser("diff-backends", help="Compare gom vs campus sprite outputs")
 
     args = parser.parse_args(argv)
@@ -93,6 +96,18 @@ def main(argv: list[str] | None = None) -> int:
                 release_suffix=args.release_suffix,
                 draft=args.draft,
             )
+        elif args.command == "prune-releases":
+            kept, removed = prune_releases(keep=args.keep, dry=args.dry)
+            print("Keep releases:")
+            for tag in kept:
+                print(f"  {tag}")
+            print("Remove releases:")
+            for tag in removed:
+                print(f"  {tag}")
+            if args.dry:
+                print("Dry run: nothing deleted")
+            else:
+                print(f"Deleted {len(removed)} release(s)")
         elif args.command == "diff-backends":
             diff_backends(config)
         else:

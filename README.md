@@ -31,6 +31,7 @@ kaa-data tasks                       # game.db → tasks.json
 kaa-data sprites --backend gom       # 下载精灵图
 kaa-data package                     # 打包 release 产物
 kaa-data release                     # 发布 GitHub Release
+kaa-data prune-releases [--keep 3] [--dry]  # 清理旧 release，仅保留最新 N 个
 kaa-data diff-backends               # 对比 gom / campus 产物
 ```
 
@@ -69,3 +70,4 @@ kaa-data diff-backends               # 对比 gom / campus 产物
 ## CI
 
 GitHub Actions 每 6 小时构建一次，支持手动触发并选择 `gom` / `campus` 后端。
+每次运行时都会调用 `prune-releases` 清理旧的 `data-*` release，仅保留最新 3 个。
