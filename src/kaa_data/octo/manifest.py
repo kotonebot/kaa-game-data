@@ -75,7 +75,7 @@ def fetch_manifest(gom_root: Path, *, base_revision: int = 0, request_timeout: i
         )
 
     return OctoManifest(
-        revision=manifest.revision.this,
+        revision=manifest.version.this.rev,
         url_format=manifest.urlformat,
         entries=entries,
     )
