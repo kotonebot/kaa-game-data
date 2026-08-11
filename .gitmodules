@@ -1,6 +1,6 @@
 [submodule "GkmasObjectManager"]
 	path = GkmasObjectManager
-	url = https://github.com/AllenHeartcore/GkmasObjectManager.git
+	url = https://github.com/kotonebot/GkmasObjectManager.git
 [submodule "campus"]
 	path = campus
 	url = https://github.com/vertesan/campus.git

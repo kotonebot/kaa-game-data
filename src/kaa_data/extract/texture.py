@@ -5,7 +5,9 @@ from pathlib import Path
 import UnityPy  # type: ignore
 import UnityPy.config  # type: ignore
 
-UnityPy.config.FALLBACK_UNITY_VERSION = "2022.3.21f1"
+# Gakumas strips the Unity version from bundles ("0.0.0") and has migrated to
+# Unity 6; the fallback must be >= 2023.2.0.18 or Texture2D fields misalign.
+UnityPy.config.FALLBACK_UNITY_VERSION = "6000.0.23f1"
 
 UNITY_SIGNATURE = b"Unity"
 
