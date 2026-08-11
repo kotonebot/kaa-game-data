@@ -90,24 +90,31 @@ def main(argv: list[str] | None = None) -> int:
                 f"{len(report.tasks_failed)} failed, {len(report.skipped)} skipped"
             )
         elif args.command == "release":
-            run_release(
-                config,
-                force=args.force,
-                release_suffix=args.release_suffix,
-                draft=args.draft,
-            )
+            try:
+                run_release(
+                    config,
+                    force=args.force,
+                    release_suffix=args.release_suffix,
+                    draft=args.draft,
+                )
+            except Exception as exc:
+                print(f"warning: release failed (non-fatal): {exc}", file=sys.stderr)
         elif args.command == "prune-releases":
-            kept, removed = prune_releases(keep=args.keep, dry=args.dry)
-            print("Keep releases:")
-            for tag in kept:
-                print(f"  {tag}")
-            print("Remove releases:")
-            for tag in removed:
-                print(f"  {tag}")
-            if args.dry:
-                print("Dry run: nothing deleted")
+            try:
+                kept, removed = prune_releases(keep=args.keep, dry=args.dry)
+            except Exception as exc:
+                print(f"warning: prune-releases failed (non-fatal): {exc}", file=sys.stderr)
             else:
-                print(f"Deleted {len(removed)} release(s)")
+                print("Keep releases:")
+                for tag in kept:
+                    print(f"  {tag}")
+                print("Remove releases:")
+                for tag in removed:
+                    print(f"  {tag}")
+                if args.dry:
+                    print("Dry run: nothing deleted")
+                else:
+                    print(f"Deleted {len(removed)} release(s)")
         elif args.command == "diff-backends":
             diff_backends(config)
         else:

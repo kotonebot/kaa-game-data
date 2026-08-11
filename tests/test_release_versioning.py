@@ -59,6 +59,7 @@ def test_publish_release_passes_draft_flag(tmp_path):
     (release_dir / "manifest.json").write_text("{}", encoding="utf-8")
 
     with mock.patch("kaa_data.release.publish.subprocess.run") as run:
+        run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
         publish_release(f"data-{_SHA}", _SHA, release_dir, [], notes_path, draft=True)
         cmd = run.call_args[0][0]
         assert "--draft" in cmd

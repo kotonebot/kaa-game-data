@@ -10,8 +10,8 @@ def _tags(count: int) -> list[str]:
     return [f"data-{_SHA}-r{i}" for i in range(count, 0, -1)]
 
 
-def _fake_run(stdout: str, *, returncode: int = 0) -> mock.Mock:
-    return mock.Mock(returncode=returncode, stdout=stdout, stderr="")
+def _fake_run(stdout: str, *, returncode: int = 0, stderr: str = "") -> mock.Mock:
+    return mock.Mock(returncode=returncode, stdout=stdout, stderr=stderr)
 
 
 def test_list_releases_returns_tags_newest_first():
@@ -29,6 +29,29 @@ def test_list_releases_raises_on_gh_failure():
             pass
         else:
             raise AssertionError("expected RuntimeError on gh failure")
+
+
+def test_list_releases_retries_transient_network_error():
+    with mock.patch("kaa_data.release.publish.subprocess.run") as run:
+        run.side_effect = [
+            _fake_run("", returncode=1, stderr="tls: failed to verify certificate: x509"),
+            _fake_run("", returncode=1, stderr="tls: failed to verify certificate: x509"),
+            _fake_run("data-1\n", returncode=0),
+        ]
+        assert list_releases() == ["data-1"]
+        assert run.call_count == 3
+
+
+def test_list_releases_does_not_retry_non_network_error():
+    with mock.patch("kaa_data.release.publish.subprocess.run") as run:
+        run.return_value = _fake_run("", returncode=1, stderr="GraphQL: not found")
+        try:
+            list_releases()
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("expected RuntimeError on gh failure")
+        assert run.call_count == 1
 
 
 def test_prune_releases_dry_run_only_lists():
