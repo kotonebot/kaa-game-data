@@ -33,17 +33,30 @@ def build_tasks(database: Path, sprites_dir: Path) -> TaskManifest:
 def _add_idol_card_tasks(db: sqlite3.Connection, manifest: TaskManifest) -> None:
     cur = db.execute(
         """
-        SELECT ICS.id AS skinId, ICS.assetId
+        SELECT ICS.id AS skinId, ICS.assetId, IC.primaStellaConsumptionSetId
         FROM IdolCardSkin ICS
+        LEFT JOIN IdolCard IC ON ICS.idolCardId = IC.id
         WHERE ICS.assetId IS NOT NULL
         """
     )
-    for skin_id, asset_id in cur.fetchall():
+    for skin_id, asset_id, prima_stella_id in cur.fetchall():
         for variant in ("0", "1"):
             manifest.tasks.append(
                 AssetTask(
                     asset_name=f"img_general_{asset_id}_{variant}-thumb-portrait",
                     output_path=manifest.sprites_dir / f"idol_cards/{skin_id}_{variant}.png",
+                    ref_id=skin_id,
+                    post_process="resizeIdolCard",
+                    expected_size=(140, 188),
+                )
+            )
+        # `_2` 变体仅存在于带 Prima Stella（一番星）形态的卡，由
+        # IdolCard.primaStellaConsumptionSetId 非空标识。
+        if prima_stella_id:
+            manifest.tasks.append(
+                AssetTask(
+                    asset_name=f"img_general_{asset_id}_2-thumb-portrait",
+                    output_path=manifest.sprites_dir / f"idol_cards/{skin_id}_2.png",
                     ref_id=skin_id,
                     post_process="resizeIdolCard",
                     expected_size=(140, 188),
