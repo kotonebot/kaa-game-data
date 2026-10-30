@@ -6,12 +6,6 @@ from pathlib import Path
 
 from kaa_data.models import AssetTask, TaskManifest
 
-CHARACTER_IDS = [
-    "hski", "ttmr", "fktn", "amao", "kllj",
-    "kcna", "ssmk", "shro", "hrnm", "hume",
-    "jsna", "atbm",
-]
-
 
 def build_tasks(database: Path, sprites_dir: Path) -> TaskManifest:
     if not database.exists():
@@ -64,7 +58,25 @@ def _add_idol_card_tasks(db: sqlite3.Connection, manifest: TaskManifest) -> None
             )
 
 
+def _character_ids(db: sqlite3.Connection) -> list[str]:
+    """角色专属技能卡的插图按角色区分（`{assetId}-{characterId}`）。
+
+    角色取自 IdolCard（可培育的偶像），新偶像上线后自动纳入。
+    不用 Character 表：它还包含老师、训练员等非偶像角色，会生成大量不存在的资源任务。
+    """
+    cur = db.execute(
+        """
+        SELECT DISTINCT characterId
+        FROM IdolCard
+        WHERE characterId IS NOT NULL AND characterId != ''
+        ORDER BY characterId
+        """
+    )
+    return [cid for (cid,) in cur.fetchall()]
+
+
 def _add_skill_card_tasks(db: sqlite3.Connection, manifest: TaskManifest) -> None:
+    character_ids = _character_ids(db)
     cur = db.execute(
         """
         SELECT DISTINCT assetId, isCharacterAsset
@@ -82,7 +94,7 @@ def _add_skill_card_tasks(db: sqlite3.Connection, manifest: TaskManifest) -> Non
                 )
             )
         else:
-            for cid in CHARACTER_IDS:
+            for cid in character_ids:
                 full_aid = f"{asset_id}-{cid}"
                 manifest.tasks.append(
                     AssetTask(
